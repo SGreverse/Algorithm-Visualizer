@@ -6,5 +6,4 @@ typedef struct {
     const char* time_worst;      
     const char* space_aux_complexity;
     const char* space_recur_complexity;
-
 } AlgoDocs;

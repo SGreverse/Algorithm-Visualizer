@@ -13,11 +13,13 @@
 #define MAX_VAL 400
 #define SCREEN_WIDTH 1000  // Widened slightly for better tab fit
 #define SCREEN_HEIGHT 700
-
-// --- UI AND ARRAY CONSTANTS ---
 #define UI_HEIGHT 130
+
 #define MAX_ARRAY_SIZE 1000
 #define MIN_ARRAY_SIZE 10
+
+#define MIN_SPEED 1
+#define MAX_SPEED 1000
 
 const SortAlgorithm* ALGORITHMS[] = {
     &BubbleSortAlgo,
@@ -33,28 +35,7 @@ const SortAlgorithm* ALGORITHMS[] = {
 const SortAlgorithm* active_algo = &BubbleSortAlgo; 
 
 
-float current_frequency = 0.0f;
-float audio_phase = 0.0f;
-
-void audioCallback(void *bufferData, unsigned int frames) {
-    short *buffer = (short *)bufferData;
-    
-    for (unsigned int i = 0; i < frames; i++) {
-        if (current_frequency > 0.0f) {
-            // Generate a simple sine wave
-            audio_phase += 2.0f * PI * current_frequency / 44100.0f;
-            if (audio_phase > 2.0f * PI) audio_phase -= 2.0f * PI;
-            
-            // Multiply by 8000 for a comfortable volume level
-            buffer[i] = (short)(sinf(audio_phase) * 8000.0f); 
-        } else {
-            buffer[i] = 0; // Silence
-        }
-    }
-}
-
-
-int WorkerThread_Run(void* arg) {
+int workerThread_Run(void* arg) {
     SortContext* ctx = (SortContext*)arg;
     active_algo->init(ctx);
     active_algo->sort(ctx);
@@ -67,7 +48,7 @@ int WorkerThread_Run(void* arg) {
     return 0;
 }
 
-void RandomizeArray(SortContext* ctx) {
+void randomizeArray(SortContext* ctx) {
     for (size_t i = 0; i < ctx->size; i++) {
         ctx->array[i] = (rand() % MAX_VAL) + 10; 
     }
@@ -79,7 +60,7 @@ void RandomizeArray(SortContext* ctx) {
     ctx->write_count = 0;
 }
 
-void StopSorting(SortContext* ctx, thrd_t* worker_thread) {
+void stopSorting(SortContext* ctx, thrd_t* worker_thread) {
     atomic_store(&ctx->kill_signal, true);
     
     mtx_lock(&ctx->mutex);
@@ -90,15 +71,15 @@ void StopSorting(SortContext* ctx, thrd_t* worker_thread) {
     thrd_join(*worker_thread, NULL); // wait for thread to die 
 }
 
-void StartSorting(SortContext* ctx, thrd_t* worker_thread) {
+void startSorting(SortContext* ctx, thrd_t* worker_thread) {
     atomic_store(&ctx->kill_signal, false);
     atomic_store(&ctx->is_sorted, false);
     ctx->active_index_a = -1;
     ctx->active_index_b = -1;
-    thrd_create(worker_thread, WorkerThread_Run, ctx);
+    thrd_create(worker_thread, workerThread_Run, ctx);
 }
 
-void DrawTextWrapped(Font font, const char* text, Vector2 position, float fontSize, float spacing, float maxWidth, Color tint) {
+void drawTextWrapped(Font font, const char* text, Vector2 position, float fontSize, float spacing, float maxWidth, Color tint) {
     float currentY = position.y;
     float currentX = position.x;
     
@@ -142,19 +123,7 @@ int main(void) {
     SetTargetFPS(60);
     srand(time(NULL));
 
-    InitAudioDevice();
-    bool is_audio_ready = IsAudioDeviceReady();
-    AudioStream stream = { 0 };
-
-    if (is_audio_ready) {
-        SetAudioStreamBufferSizeDefault(4096);
-        stream = LoadAudioStream(44100, 16, 1);
-        SetAudioStreamCallback(stream, audioCallback);
-        PlayAudioStream(stream);
-    } else {
-        TraceLog(LOG_WARNING, "Audio hardware not found. Running visualizer in silent mode.");
-    }
-
+    
     // allocate max possible memory upfront to prevent re-allocating during runtime
     int data_array[MAX_ARRAY_SIZE];
     
@@ -170,9 +139,13 @@ int main(void) {
     mtx_init(&context.mutex, mtx_plain);
     cnd_init(&context.condition_var);
 
-    RandomizeArray(&context);
+    randomizeArray(&context);
 
     thrd_t worker_thread;
+    int target_speed = 60; // Now represents operations per second, not app FPS
+    bool is_dragging_speed = false;
+    float step_timer = 0.0f;
+    
     bool is_running = false;
     bool is_dragging_slider = false;
     bool is_docs_shown = false;
@@ -198,22 +171,11 @@ int main(void) {
             sweep_timer += GetFrameTime();
             sweep_index = (int)((sweep_timer / SWEEP_DURATION) * context.size);
             
-            if (sweep_index >= context.size) {
+            if (sweep_index >= (int)context.size) {
                 is_sweeping = false;
                 sweep_index = context.size;
-                current_frequency = 0.0f; // Silence
-            } else {
-                // Play sound based on the sweeping index
-                float val = context.array[sweep_index];
-                current_frequency = 120.0f + (val / MAX_VAL) * 1000.0f;
-            }
-        } else if (is_running && context.active_index_a != -1) {
-            // Play sound based on the active algorithmic pointer
-            float val = context.array[context.active_index_a];
-            current_frequency = 120.0f + (val / MAX_VAL) * 1000.0f;
-        } else {
-            current_frequency = 0.0f; // Silence if idle
-        }
+            } 
+        } 
 
         BeginDrawing();
         ClearBackground(GetColor(0x121212FF)); // Sleek dark gray background
@@ -245,7 +207,7 @@ int main(void) {
             // Tab Click Logic (Only allow switching if NOT running)
             if (!is_docs_shown && is_hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !is_running) {
                 active_algo = ALGORITHMS[i];
-                RandomizeArray(&context);
+                randomizeArray(&context);
             }
         }
 
@@ -258,7 +220,7 @@ int main(void) {
             DrawRectangleRec(btn, btn_hover ? GetColor(0x10B981FF) : GetColor(0x059669FF)); // Green
             DrawText("START", btn.x + 45, btn.y + 15, 20, WHITE);
             if (btn_hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                StartSorting(&context, &worker_thread);
+                startSorting(&context, &worker_thread);
                 is_running = true;
             }
         } 
@@ -267,7 +229,7 @@ int main(void) {
             DrawRectangleRec(btn, btn_hover ? GetColor(0xEF4444FF) : GetColor(0xDC2626FF)); // Red
             DrawText("STOP", btn.x + 55, btn.y + 15, 20, WHITE);
             if (btn_hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                StopSorting(&context, &worker_thread);
+                stopSorting(&context, &worker_thread);
                 is_running = false;
             }
         }
@@ -276,7 +238,7 @@ int main(void) {
             DrawRectangleRec(btn, btn_hover ? GetColor(0x8B5CF6FF) : GetColor(0x7C3AEDFF)); // Purple
             DrawText("RESET", btn.x + 45, btn.y + 15, 20, WHITE);
             if (btn_hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                RandomizeArray(&context);
+                randomizeArray(&context);
                 context.active_index_a = -1;
                 context.active_index_b = -1;
             }
@@ -290,7 +252,7 @@ int main(void) {
         }
 
         // Array Size Slider
-        Rectangle track = { 400, 85, 300, 6 };
+        Rectangle track = { 400, 70, 300, 6 };
         DrawRectangleRec(track, GetColor(0x4B5563FF));
         
         // Calculate knob position based on current size
@@ -319,7 +281,7 @@ int main(void) {
                 
                 if (calculated_size != context.size) {
                     context.size = calculated_size;
-                    RandomizeArray(&context); 
+                    randomizeArray(&context); 
                 }
             }
         } else {
@@ -328,14 +290,61 @@ int main(void) {
         
         if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) is_dragging_slider = false;
 
+
+        //speed slider logic
+        Rectangle speed_track = { 400, 115, 300, 6 };
+        DrawRectangleRec(speed_track, GetColor(0x4B5563FF));
+        
+        float speed_percent = (float)(target_speed - MIN_SPEED) / (MAX_SPEED - MIN_SPEED);
+        Rectangle speed_knob = { speed_track.x + (speed_percent * speed_track.width) - 8, speed_track.y - 7, 16, 20 };
+        
+        char speedText[32];
+        sprintf(speedText, "Speed: %d ops/sec", target_speed);
+        DrawText(speedText, speed_track.x, speed_track.y - 20, 16, LIGHTGRAY);
+
+        DrawRectangleRec(speed_knob, is_dragging_speed ? WHITE : LIGHTGRAY);
+        Rectangle speed_hitBox = { speed_track.x - 20, speed_track.y - 20, speed_track.width + 40, speed_track.height + 40 };
+        
+        if (IsMouseButtonDown(MOUSE_LEFT_BUTTON) && (CheckCollisionPointRec(mouse, speed_hitBox) || is_dragging_speed)) {
+            is_dragging_speed = true;
+            
+            float normalized = (mouse.x - speed_track.x) / speed_track.width;
+            if (normalized < 0.0f) normalized = 0.0f;
+            if (normalized > 1.0f) normalized = 1.0f;
+            
+            int calculated_speed = MIN_SPEED + (int)(normalized * (MAX_SPEED - MIN_SPEED));
+            
+            if (calculated_speed != target_speed) {
+                target_speed = calculated_speed;
+                // UI FIX: Never drop the app framerate below 60!
+                SetTargetFPS(target_speed > 60 ? target_speed : 60); 
+                step_timer = 0.0f; 
+            }
+        }
+        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) is_dragging_speed = false;
+
         int stats_x = SCREEN_WIDTH - 280;
         int stats_y = 55;
         
         DrawText(TextFormat("Compares: %zu", context.compare_count), stats_x, stats_y, 20, GetColor(0x9CA3AFFF)); // Light Gray
         DrawText(TextFormat("Swaps: %zu", context.swap_count), stats_x, stats_y + 25, 20, GetColor(0x9CA3AFFF)); 
         DrawText(TextFormat("Writes: %zu", context.write_count), stats_x, stats_y + 50, 20, GetColor(0x9CA3AFFF));
-        //draw array
-        //requiresgetting the lock
+
+        bool should_step = false;
+        if (target_speed >= 60) {
+            should_step = true; // Fast speeds step every single frame
+        } else {
+            step_timer += GetFrameTime();
+            float time_per_step = 1.0f / target_speed;
+            
+            // Only step if enough time has passed
+            if (step_timer >= time_per_step) {
+                should_step = true;
+                step_timer -= time_per_step; // Subtract to preserve precise timing remainder
+            }
+        }
+
+
         mtx_lock(&context.mutex);
 
         float bar_width = (float)SCREEN_WIDTH / context.size;
@@ -363,11 +372,12 @@ int main(void) {
             DrawRectangleV((Vector2){x_pos, y_pos}, (Vector2){bar_width > 2 ? bar_width - 1 : bar_width, bar_height}, bar_color);
         }
 
-        //signal algorithm thread to keep going
-        context.frame_consumed = true;
-
-        if (!atomic_load(&context.is_sorted) && is_running) {
-            cnd_signal(&context.condition_var);
+        if (should_step) {
+            context.frame_consumed = true; //singal aglorithm thread to continue
+            
+            if (!atomic_load(&context.is_sorted) && is_running) {
+                cnd_signal(&context.condition_var); // wake up thread
+            }
         }
 
         mtx_unlock(&context.mutex);
@@ -411,13 +421,13 @@ int main(void) {
             // Overview
             DrawText("Overview", modal.x + padding, startY, 20, GetColor(0x60A5FAFF)); // Light blue header
             startY += 25;
-            DrawTextWrapped(defaultFont, active_algo->docs.overview, (Vector2){modal.x + padding, startY}, 18, 1.0f, modalWidth - (padding*2), LIGHTGRAY);
+            drawTextWrapped(defaultFont, active_algo->docs.overview, (Vector2){modal.x + padding, startY}, 18, 1.0f, modalWidth - (padding*2), LIGHTGRAY);
             
             // Process (Skip down to allow space for overview)
             startY += 100; 
             DrawText("How it Works", modal.x + padding, startY, 20, GetColor(0x60A5FAFF));
             startY += 25;
-            DrawTextWrapped(defaultFont, active_algo->docs.process, (Vector2){modal.x + padding, startY}, 18, 1.0f, modalWidth - (padding*2), LIGHTGRAY);
+            drawTextWrapped(defaultFont, active_algo->docs.process, (Vector2){modal.x + padding, startY}, 18, 1.0f, modalWidth - (padding*2), LIGHTGRAY);
             
             // Complexity Box
             startY += 200;
@@ -439,14 +449,9 @@ int main(void) {
     }
 
     if (is_running) {
-        StopSorting(&context, &worker_thread);
+        stopSorting(&context, &worker_thread);
     }
 
-
-    if (is_audio_ready) {
-        UnloadAudioStream(stream);
-        CloseAudioDevice();
-    }
     cnd_destroy(&context.condition_var);
     mtx_destroy(&context.mutex);
     CloseWindow();

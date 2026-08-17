@@ -52,6 +52,7 @@ void hook_Write(SortContext* ctx, int idx,int val){
         return;
     }
     ctx->write_count++;
+    
     ctx->array[idx]=val;
     ctx->active_index_a = idx;
     ctx->active_index_b=-1;
