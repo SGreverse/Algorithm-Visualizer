@@ -26,8 +26,8 @@ typedef struct{
     int parent_x;
     int parent_y;
 
-    int x;
-    int y;
+    size_t x;
+    size_t y;
 
     //tracks nodes in the  heap(inits to -1 if not in)
     size_t heap_index;
@@ -41,13 +41,13 @@ struct PFContext{
 
     //1d array mapping the 2d grid, to increase cache hits
     GridNode* grid;
-    int n_rows;
-    int n_columns;
+    size_t n_rows;
+    size_t n_columns;
 
-    int start_x;
-    int start_y;
-    int target_x;
-    int target_y;
+    size_t start_x;
+    size_t start_y;
+    size_t target_x;
+    size_t target_y;
 
 
 
