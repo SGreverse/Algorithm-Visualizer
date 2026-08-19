@@ -11,7 +11,7 @@ This architecture allows for real-time visual updates, live operation counting, 
 *   **Path-Finding Engine:** Implementations of BFS(Breadth-First Search),Dijkstra's algorithm, and A*.
 *   **Live Analytics:** Tracks algorithmic comparisons, memory swaps, and array writes in real-time for sorting.
 *   **Built-in Documentation:** An integrated UI modal detailing the mechanics, step-by-step logic, and Big-O complexity for each algorithm.
-
+*   If you want to learn about the techniques used for creating pseudo-generic OOP c you can check out my other repo:[OOP In C](https://github.com/SGreverse/OOP-in-C)
 ## How to Use
 
 Once compiled and running, the entire application is controlled via the UI:
