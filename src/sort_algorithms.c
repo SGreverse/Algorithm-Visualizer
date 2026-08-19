@@ -1,4 +1,5 @@
 #include "sort_algorithms.h"
+#include "algo_types.h"
 #include "sort_types.h"
 #include <stdatomic.h>
 #include <stddef.h>
@@ -6,9 +7,10 @@
 #include <threads.h>
 
 int hook_Compare(SortContext* ctx, int idx_a, int idx_b){
-    mtx_lock(&ctx->mutex); 
-    if (atomic_load(&ctx->kill_signal)) {
-        mtx_unlock(&ctx->mutex);
+    AlgoContext* ctx_b=BASE(ctx);
+    mtx_lock(&ctx_b->mutex); 
+    if (atomic_load(&ctx_b->kill_signal)) {
+        mtx_unlock(&ctx_b->mutex);
         return -1;
     }
 
@@ -17,18 +19,19 @@ int hook_Compare(SortContext* ctx, int idx_a, int idx_b){
     int result = ctx->array[idx_a] - ctx->array[idx_b];
     ctx->active_index_a = idx_a; 
     ctx->active_index_b = idx_b; 
-    ctx->frame_consumed = false; 
-    while(!ctx->frame_consumed && !atomic_load(&ctx->kill_signal)){
-        cnd_wait(&ctx->condition_var, &ctx->mutex);
+    ctx_b->frame_consumed = false; 
+    while(!ctx_b->frame_consumed && !atomic_load(&ctx_b->kill_signal)){
+        cnd_wait(&ctx_b->condition_var, &ctx_b->mutex);
     }
-    mtx_unlock(&ctx->mutex);
+    mtx_unlock(&ctx_b->mutex);
     return result;
 }
 
 void hook_Swap(SortContext* ctx, int idx_a, int idx_b) {
-    mtx_lock(&ctx->mutex); 
-    if (atomic_load(&ctx->kill_signal)) {
-        mtx_unlock(&ctx->mutex);
+    AlgoContext* ctx_b=BASE(ctx);
+    mtx_lock(&ctx_b->mutex); 
+    if (atomic_load(&ctx_b->kill_signal)) {
+        mtx_unlock(&ctx_b->mutex);
         return;
     }
     ctx->swap_count++;
@@ -38,17 +41,18 @@ void hook_Swap(SortContext* ctx, int idx_a, int idx_b) {
     ctx->array[idx_b] = temp; 
     ctx->active_index_a = idx_a; 
     ctx->active_index_b = idx_b; 
-    ctx->frame_consumed = false; 
-    while (!ctx->frame_consumed && !atomic_load(&ctx->kill_signal)) {
-        cnd_wait(&ctx->condition_var, &ctx->mutex);
+    ctx_b->frame_consumed = false; 
+    while (!ctx_b->frame_consumed && !atomic_load(&ctx_b->kill_signal)) {
+        cnd_wait(&ctx_b->condition_var, &ctx_b->mutex);
     }
-    mtx_unlock(&ctx->mutex); 
+    mtx_unlock(&ctx_b->mutex); 
 }
 
 void hook_Write(SortContext* ctx, int idx,int val){
-    mtx_lock(&ctx->mutex); 
-    if (atomic_load(&ctx->kill_signal)) {
-        mtx_unlock(&ctx->mutex);
+    AlgoContext* ctx_b=BASE(ctx);
+    mtx_lock(&ctx_b->mutex); 
+    if (atomic_load(&ctx_b->kill_signal)) {
+        mtx_unlock(&ctx_b->mutex);
         return;
     }
     ctx->write_count++;
@@ -56,24 +60,27 @@ void hook_Write(SortContext* ctx, int idx,int val){
     ctx->array[idx]=val;
     ctx->active_index_a = idx;
     ctx->active_index_b=-1;
-    ctx->frame_consumed = false;
-    while (!ctx->frame_consumed && !atomic_load(&ctx->kill_signal)) {
-        cnd_wait(&ctx->condition_var, &ctx->mutex);
+    ctx_b->frame_consumed = false;
+    while (!ctx_b->frame_consumed && !atomic_load(&ctx_b->kill_signal)) {
+        cnd_wait(&ctx_b->condition_var, &ctx_b->mutex);
     }
-    mtx_unlock(&ctx->mutex); 
+    mtx_unlock(&ctx_b->mutex); 
 }
 
 #pragma region Bubble Sort
 
-void bubbleSort_Init(SortContext* ctx) { 
-    //nothing to init
+void bubbleSort_Init(AlgoContext* ctx_b) { 
+    SortContext* ctx=(SortContext*)ctx_b;
+    ctx->active_index_a = -1;
+    ctx->active_index_b = -1;
 }
 
-void bubbleSort_Run(SortContext* ctx) {
+void bubbleSort_Run(AlgoContext* ctx_b) {
+    SortContext* ctx=(SortContext*)ctx_b;
     for(size_t i=0;i<ctx->size;i++){
         for(size_t j=0;j<ctx->size-i-1;j++){
             //loads the signal atomically
-            if(atomic_load(&ctx->kill_signal)) return;
+            if(atomic_load(&ctx_b->kill_signal)) return;
             ctx->active_index_a=j;
             ctx->active_index_b=j+1;
             if(ctx->compare(ctx,j,j+1)>0){
@@ -83,13 +90,14 @@ void bubbleSort_Run(SortContext* ctx) {
     }
 }
 
-void bubbleSort_Cleanup(SortContext* ctx) {
+void bubbleSort_Cleanup(AlgoContext* ctx_b) {
+    SortContext* ctx=(SortContext*)ctx_b;
     ctx->active_index_a = -1;
     ctx->active_index_b = -1;
 }
 
 
-const SortAlgorithm BubbleSortAlgo = {
+const Algorithm BubbleSortAlgo = {
     .name = "Bubble Sort",
     .docs = {
         .overview = "A simple comparison-based sorting algorithm that repeatedly steps through the list, compares adjacent elements, and swaps them if they are in the wrong order.",
@@ -106,7 +114,7 @@ const SortAlgorithm BubbleSortAlgo = {
         .space_recur_complexity = "O(1)"
     },
     .init = bubbleSort_Init,
-    .sort = bubbleSort_Run,
+    .run = bubbleSort_Run,
     .cleanup = bubbleSort_Cleanup
 };
 
@@ -114,15 +122,18 @@ const SortAlgorithm BubbleSortAlgo = {
 
 #pragma region Selection Sort
 
-void selectionSort_Init(SortContext* ctx) { 
-    //nothing to init
+void selectionSort_Init(AlgoContext* ctx_b) { 
+    SortContext* ctx=(SortContext*)ctx_b;
+    ctx->active_index_a = -1;
+    ctx->active_index_b = -1;
 }
 
-void selectionSort_Run(SortContext* ctx) {
+void selectionSort_Run(AlgoContext* ctx_b) {
+    SortContext* ctx=CAST_SORT(ctx_b);
     for (size_t i = 0; i < ctx->size - 1; i++) {
         size_t min_index = i;
         for (size_t j = i + 1; j < ctx->size; j++) {
-            if(atomic_load(&ctx->kill_signal)) return;
+            if(atomic_load(&ctx_b->kill_signal)) return;
 
             if (ctx->compare(ctx,j,min_index)<0) {
                 min_index = j;
@@ -136,12 +147,13 @@ void selectionSort_Run(SortContext* ctx) {
 
 }
 
-void selectionSort_Cleanup(SortContext* ctx) {
+void selectionSort_Cleanup(AlgoContext* ctx_b) {
+    SortContext* ctx=CAST_SORT(ctx_b);
     ctx->active_index_a = -1;
     ctx->active_index_b = -1;
 }
 
-const SortAlgorithm SelectionSortAlgo = {
+const Algorithm SelectionSortAlgo = {
     .name = "Selection Sort",
     .docs = {
         .overview = "An in-place comparison algorithm that divides the input into a sorted and an unsorted region. It repeatedly searches the unsorted region for the minimum element and appends it to the sorted region.",
@@ -157,22 +169,25 @@ const SortAlgorithm SelectionSortAlgo = {
         .space_recur_complexity = "O(1)"
     },
     .init = selectionSort_Init,
-    .sort = selectionSort_Run,
+    .run = selectionSort_Run,
     .cleanup = selectionSort_Cleanup
 };
 #pragma endregion
 
 #pragma region Insertion Sort
-void insertionSort_Init(SortContext* ctx) { 
-    //nothing to init
+void insertionSort_Init(AlgoContext* ctx_b) { 
+    SortContext* ctx=(SortContext*)ctx_b;
+    ctx->active_index_a = -1;
+    ctx->active_index_b = -1;
 }
 
-void insertionSort_Run(SortContext* ctx) {
-    for (int i = 1; i < ctx->size; i++) {
+void insertionSort_Run(AlgoContext* ctx_b) {
+    SortContext* ctx=CAST_SORT(ctx_b);
+    for (size_t i = 1; i < ctx->size; i++) {
         int j = i;
         
         while (j > 0) {
-            if (atomic_load(&ctx->kill_signal)) return;
+            if (atomic_load(&ctx_b->kill_signal)) return;
 
             if (ctx->compare(ctx, j - 1, j) > 0) {
                 ctx->swap(ctx, j - 1, j);
@@ -184,13 +199,14 @@ void insertionSort_Run(SortContext* ctx) {
     }
 }
 
-void insertionSort_Cleanup(SortContext* ctx) {
+void insertionSort_Cleanup(AlgoContext* ctx_b) {
+    SortContext* ctx=CAST_SORT(ctx_b);
     ctx->active_index_a = -1;
     ctx->active_index_b = -1;
 }
 
 
-const SortAlgorithm InsertionSortAlgo = {
+const Algorithm InsertionSortAlgo = {
     .name = "Insertion Sort",
     .docs = {
         .overview = "A simple sorting algorithm that builds the final sorted array one item at a time. It is much less efficient on large lists than more advanced algorithms, but provides excellent performance for mostly-sorted data.",
@@ -207,7 +223,7 @@ const SortAlgorithm InsertionSortAlgo = {
         .space_recur_complexity = "O(1)"
     },
     .init = insertionSort_Init,
-    .sort = insertionSort_Run,
+    .run = insertionSort_Run,
     .cleanup = insertionSort_Cleanup
 };
 
@@ -215,11 +231,14 @@ const SortAlgorithm InsertionSortAlgo = {
 
 #pragma region Merge Sort
 
-void mergeSort_Init(SortContext* ctx) { 
+void mergeSort_Init(AlgoContext* ctx_b) { 
+    SortContext* ctx=CAST_SORT(ctx_b);
     ctx->auxiliary_memory=malloc(ctx->size*sizeof(int));
     if (ctx->auxiliary_memory == NULL) {
-        atomic_store(&ctx->kill_signal, true);
+        atomic_store(&ctx_b->kill_signal, true);
     }
+    ctx->active_index_a = -1;
+    ctx->active_index_b = -1;
 }
 
 
@@ -236,7 +255,7 @@ void mergeSort_Merge(SortContext* ctx,int left,int mid,int right){
 
     while (i <= mid && j <= right) {
         
-        if (atomic_load(&ctx->kill_signal)) return;
+        if (atomic_load(&BASE(ctx)->kill_signal)) return;
 
         if (aux[i] <= aux[j]) {
             ctx->write(ctx, k, aux[i]);
@@ -249,14 +268,14 @@ void mergeSort_Merge(SortContext* ctx,int left,int mid,int right){
     }
 
     while (i <= mid) {
-        if (atomic_load(&ctx->kill_signal)) return;
+        if (atomic_load(&BASE(ctx)->kill_signal)) return;
         ctx->write(ctx, k, aux[i]);
         i++;
         k++;
     }
 
     while (j <= right) {
-        if (atomic_load(&ctx->kill_signal)) return;
+        if (atomic_load(&BASE(ctx)->kill_signal)) return;
         ctx->write(ctx, k, aux[j]);
         j++;
         k++;
@@ -267,7 +286,7 @@ void mergeSort_Merge(SortContext* ctx,int left,int mid,int right){
 static void mergeSort_Recursive(SortContext* ctx,int left, int right){
     if (left >= right) return;
     
-    if (atomic_load(&ctx->kill_signal)) return;
+    if (atomic_load(&BASE(ctx)->kill_signal)) return;
 
     int mid = left + (right - left) / 2;
 
@@ -277,19 +296,21 @@ static void mergeSort_Recursive(SortContext* ctx,int left, int right){
     mergeSort_Merge(ctx, left, mid, right);
 
 }
-void mergeSort_Run(SortContext* ctx){
+void mergeSort_Run(AlgoContext* ctx_b){
+    SortContext* ctx=CAST_SORT(ctx_b);
     mergeSort_Recursive(ctx, 0, ctx->size-1);
 }
 
 
-void mergeSort_Cleanup(SortContext* ctx){
+void mergeSort_Cleanup(AlgoContext* ctx_b){
+    SortContext* ctx=CAST_SORT(ctx_b);
     free(ctx->auxiliary_memory);
     ctx->active_index_a = -1;
     ctx->active_index_b = -1;
 }
 
 
-const SortAlgorithm MergeSortAlgo = {
+const Algorithm MergeSortAlgo = {
     .name = "Merge Sort",
     .docs = {
         .overview = "A highly efficient, stable, divide-and-conquer algorithm. It works by continuously splitting an array in half until it cannot be further divided, then merging the sorted halves back together.",
@@ -305,15 +326,17 @@ const SortAlgorithm MergeSortAlgo = {
         .space_recur_complexity = "O(log N)"
     },
     .init = mergeSort_Init,
-    .sort = mergeSort_Run,
+    .run = mergeSort_Run,
     .cleanup = mergeSort_Cleanup
 };
 
 #pragma endregion
 
 #pragma region Quick Sort
-void quickSort_Init(SortContext* ctx){
-    //nothing needed
+void quickSort_Init(AlgoContext* ctx_b){
+    SortContext* ctx=(SortContext*)ctx_b;
+    ctx->active_index_a = -1;
+    ctx->active_index_b = -1;
 }
 
 static int quickSort_Partition(SortContext* ctx,int low,int high){
@@ -321,15 +344,15 @@ static int quickSort_Partition(SortContext* ctx,int low,int high){
     int j = high;
 
     while (i < j) {
-        if (atomic_load(&ctx->kill_signal)) return low;
+        if (atomic_load(&BASE(ctx)->kill_signal)) return low;
 
         while (i <= high - 1 && ctx->compare(ctx, i, low) <= 0) {
-            if (atomic_load(&ctx->kill_signal)) return low;
+            if (atomic_load(&BASE(ctx)->kill_signal)) return low;
             i++;
         }
 
         while (j >= low + 1 && ctx->compare(ctx, j, low) > 0) {
-            if (atomic_load(&ctx->kill_signal)) return low;
+            if (atomic_load(&BASE(ctx)->kill_signal)) return low;
             j--;
         }
         if (i < j) {
@@ -341,7 +364,7 @@ static int quickSort_Partition(SortContext* ctx,int low,int high){
 }
 
 static void quickSort_Recursive(SortContext* ctx,int low,int high){
-    if (atomic_load(&ctx->kill_signal)) return;
+    if (atomic_load(&BASE(ctx)->kill_signal)) return;
     
     if (low < high) {
 
@@ -352,15 +375,17 @@ static void quickSort_Recursive(SortContext* ctx,int low,int high){
         quickSort_Recursive(ctx, pi + 1, high);
     }
 }
-void quickSort_Run(SortContext* ctx){
+void quickSort_Run(AlgoContext* ctx_b){
+    SortContext* ctx=CAST_SORT(ctx_b);
     quickSort_Recursive(ctx, 0, ctx->size-1);
 }
 
-void quickSort_Cleanup(SortContext* ctx){
+void quickSort_Cleanup(AlgoContext* ctx_b){
+    SortContext* ctx=CAST_SORT(ctx_b);
     ctx->active_index_a = -1;
     ctx->active_index_b = -1;
 }
-const SortAlgorithm QuickSortAlgo = {
+const Algorithm QuickSortAlgo = {
     .name = "Quick Sort",
     .docs = {
         .overview = "A highly efficient divide-and-conquer algorithm that relies on a 'pivot' element. It partitions the array into two halves based on the pivot and recursively sorts them. In practice, it is often the fastest sorting algorithm.",
@@ -376,7 +401,7 @@ const SortAlgorithm QuickSortAlgo = {
         .space_recur_complexity = "O(log N)"
     },
     .init = quickSort_Init,
-    .sort = quickSort_Run,
+    .run = quickSort_Run,
     .cleanup = quickSort_Cleanup
 };
 #pragma endregion
@@ -391,26 +416,30 @@ int countingSort_GetMax(SortContext* ctx){
     }
     return max_val;
 }
-void countingSort_Init(SortContext* ctx) { 
+void countingSort_Init(AlgoContext* ctx_b) { 
+    SortContext* ctx=CAST_SORT(ctx_b);
     ctx->auxiliary_memory=calloc(countingSort_GetMax(ctx)+1,sizeof(int));
     if(ctx->auxiliary_memory==NULL){
-        atomic_store(&ctx->kill_signal, true);
+        atomic_store(&ctx_b->kill_signal, true);
     }
+    ctx->active_index_a = -1;
+    ctx->active_index_b = -1;
 }
 
-void countingSort_Run(SortContext* ctx) {
+void countingSort_Run(AlgoContext* ctx_b) {
+    SortContext* ctx=CAST_SORT(ctx_b);
     int* aux=(int*)ctx->auxiliary_memory;
     int inx=0;
 
     for (size_t i = 0; i < ctx->size; i++) {
-        if(atomic_load(&ctx->kill_signal)) return;
+        if(atomic_load(&ctx_b->kill_signal)) return;
         ctx->compare(ctx,i,i);// to visually show a scan of the array
         aux[ctx->array[i]]++;
     }
     int max=countingSort_GetMax(ctx);
     for(int i=0;i<=max;i++){
         while(aux[i]>0){
-            if(atomic_load(&ctx->kill_signal)) return;
+            if(atomic_load(&ctx_b->kill_signal)) return;
             ctx->write(ctx,inx,i);
             inx++;
             aux[i]--;
@@ -420,13 +449,14 @@ void countingSort_Run(SortContext* ctx) {
 
 }
 
-void countingSort_Cleanup(SortContext* ctx) {
+void countingSort_Cleanup(AlgoContext* ctx_b) {
+    SortContext* ctx=CAST_SORT(ctx_b);
     free(ctx->auxiliary_memory);
     ctx->active_index_a = -1;
     ctx->active_index_b = -1;
 }
 
-const SortAlgorithm CountingSortAlgo = {
+const Algorithm CountingSortAlgo = {
     .name = "Counting Sort",
     .docs = {
         .overview = "A non-comparative integer sorting algorithm. It operates by counting the number of objects that possess distinct key values, rather than performing direct element-to-element comparisons.",
@@ -442,15 +472,21 @@ const SortAlgorithm CountingSortAlgo = {
         .space_recur_complexity = "O(1)"
     },
     .init = countingSort_Init,
-    .sort = countingSort_Run,
+    .run = countingSort_Run,
     .cleanup = countingSort_Cleanup
 };
 
 #pragma endregion
 
 #pragma region Radix Sort
-void radixSort_Init(SortContext* ctx) { 
+void radixSort_Init(AlgoContext* ctx_b) {
+    SortContext* ctx=CAST_SORT(ctx_b); 
     ctx->auxiliary_memory=malloc(ctx->size*sizeof(int));
+    if(ctx->auxiliary_memory==NULL){
+        atomic_store(&ctx_b->kill_signal, true);
+    }
+    ctx->active_index_a = -1;
+    ctx->active_index_b = -1;
 }
 int RadixSort_getMax(SortContext* ctx) {
     int max_val=ctx->array[0];
@@ -467,43 +503,45 @@ void RadixSort_CountSort(SortContext* ctx, int exp) {
     size_t j;
  
     for (j = 0; j < ctx->size; j++){
-        if(atomic_load(&ctx->kill_signal)) return;
+        if(atomic_load(&BASE(ctx)->kill_signal)) return;
         cnt[(ctx->array[j] / exp) % 10]++;
         ctx->compare(ctx,j,j);
     }
  
     for (i = 1; i < 10; i++){
-        if(atomic_load(&ctx->kill_signal)) return;
+        if(atomic_load(&BASE(ctx)->kill_signal)) return;
         cnt[i] += cnt[i - 1];
     }
  
     for (i = ctx->size - 1; i >= 0; i--) {
-        if(atomic_load(&ctx->kill_signal)) return;
+        if(atomic_load(&BASE(ctx)->kill_signal)) return;
         aux[cnt[(ctx->array[i] / exp) % 10] - 1] = ctx->array[i];
         cnt[(ctx->array[i] / exp) % 10]--; 
     }
 
     for (j = 0; j < ctx->size; j++){
-        if(atomic_load(&ctx->kill_signal)) return;
+        if(atomic_load(&BASE(ctx)->kill_signal)) return;
         ctx->write(ctx,j,aux[j]);
     }
 }
 
-void radixSort_Run(SortContext* ctx) {
+void radixSort_Run(AlgoContext* ctx_b) {
+    SortContext* ctx=CAST_SORT(ctx_b);
     int m = RadixSort_getMax(ctx);
 
     for (int exp = 1; m / exp > 0; exp *= 10)
         RadixSort_CountSort(ctx,exp);
 }
 
-void radixSort_Cleanup(SortContext* ctx) {
+void radixSort_Cleanup(AlgoContext* ctx_b) {
+    SortContext* ctx=CAST_SORT(ctx_b);
     free(ctx->auxiliary_memory);
     ctx->active_index_a = -1;
     ctx->active_index_b = -1;
 }
 
 
-const SortAlgorithm RadixSortAlgo = {
+const Algorithm RadixSortAlgo = {
     .name = "Radix Sort",
     .docs = {
         .overview = "A non-comparative sorting algorithm that sorts data with integer keys by grouping keys by the individual digits which share the same significant position and value.",
@@ -519,14 +557,16 @@ const SortAlgorithm RadixSortAlgo = {
         .space_recur_complexity = "O(1)"
     },
     .init = radixSort_Init,
-    .sort = radixSort_Run,
+    .run = radixSort_Run,
     .cleanup = radixSort_Cleanup
 };
 #pragma endregion
 
 #pragma region Heap Sort
-void heapSort_Init(SortContext* ctx) { 
-    //nothing to init
+void heapSort_Init(AlgoContext* ctx_b) { 
+    SortContext* ctx=CAST_SORT(ctx_b);
+    ctx->active_index_a = -1;
+    ctx->active_index_b = -1;
 }
 
 static void heapSort_Heapify(SortContext* ctx,size_t n,size_t i){
@@ -547,27 +587,29 @@ static void heapSort_Heapify(SortContext* ctx,size_t n,size_t i){
         heapSort_Heapify(ctx,n, largest);
     }
 }
-void heapSort_Run(SortContext* ctx) {
+void heapSort_Run(AlgoContext* ctx_b) {
+    SortContext* ctx=CAST_SORT(ctx_b);
     for (int i = ctx->size / 2 - 1; i >= 0; i--) {
-        if(atomic_load(&ctx->kill_signal)) return;
+        if(atomic_load(&BASE(ctx)->kill_signal)) return;
         heapSort_Heapify(ctx,ctx->size, i);
     }
 
     for (int i = ctx->size - 1; i > 0; i--) {
-        if(atomic_load(&ctx->kill_signal)) return;
+        if(atomic_load(&BASE(ctx)->kill_signal)) return;
         ctx->swap(ctx,0,i);
         heapSort_Heapify(ctx, i,0);
     }
 
 }
 
-void heapSort_Cleanup(SortContext* ctx) {
+void heapSort_Cleanup(AlgoContext* ctx_b) {
+    SortContext* ctx=CAST_SORT(ctx_b);
     ctx->active_index_a = -1;
     ctx->active_index_b = -1;
 }
 
 
-const SortAlgorithm HeapSortAlgo = {
+const Algorithm HeapSortAlgo = {
     .name = "Heap Sort",
     .docs = {
         .overview = "A highly efficient in-place sorting algorithm that divides its input into a sorted and an unsorted region by dynamically managing the unsorted region using a binary heap data structure.",
@@ -583,7 +625,7 @@ const SortAlgorithm HeapSortAlgo = {
         .space_recur_complexity = "O(log N)"
     },
     .init = heapSort_Init,
-    .sort = heapSort_Run,
+    .run = heapSort_Run,
     .cleanup = heapSort_Cleanup
 };
 #pragma endregion

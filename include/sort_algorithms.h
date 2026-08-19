@@ -2,14 +2,14 @@
 #define ALGORITHMS_H
 
 #include "sort_types.h"
-extern const SortAlgorithm BubbleSortAlgo;
-extern const SortAlgorithm QuickSortAlgo;
-extern const SortAlgorithm MergeSortAlgo;
-extern const SortAlgorithm SelectionSortAlgo;
-extern const SortAlgorithm InsertionSortAlgo;
-extern const SortAlgorithm CountingSortAlgo;
-extern const SortAlgorithm RadixSortAlgo;
-extern const SortAlgorithm HeapSortAlgo;
+extern const Algorithm BubbleSortAlgo;
+extern const Algorithm QuickSortAlgo;
+extern const Algorithm MergeSortAlgo;
+extern const Algorithm SelectionSortAlgo;
+extern const Algorithm InsertionSortAlgo;
+extern const Algorithm CountingSortAlgo;
+extern const Algorithm RadixSortAlgo;
+extern const Algorithm HeapSortAlgo;
 
 int hook_Compare(SortContext* ctx, int idx_a, int idx_b);
 void hook_Swap(SortContext* ctx, int idx_a, int idx_b) ;

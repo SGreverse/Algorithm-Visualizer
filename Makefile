@@ -12,6 +12,7 @@ all: $(EXEC)
 
 $(EXEC): $(OBJ)
 	$(CC) $(OBJ) -o $@ $(LDFLAGS)
+	rm -f src/*.o
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
