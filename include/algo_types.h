@@ -22,7 +22,7 @@ typedef struct{
     atomic_bool is_finished;
 
     //for going past the ralylib refresh rate limitation by batch executing
-    //optional for each algorithm
+    //optional for each algorithm, only if you really need it broski
     int step_counter;
     int steps_per_frame;
 }AlgoContext;

@@ -1,3 +1,6 @@
+#ifndef DOCUMENTATION_H
+#define DOCUMENTATION_H
+
 typedef struct {
     const char* overview;         // General description
     const char* process;          // Step-by-step detailed explanation
@@ -7,3 +10,5 @@ typedef struct {
     const char* space_aux_complexity;
     const char* space_recur_complexity;
 } AlgoDocs;
+
+#endif

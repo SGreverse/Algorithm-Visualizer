@@ -23,7 +23,7 @@ void hook_MarkNode(PFContext* ctx, GridNode* node, NodeState new_state){
     
     ctx_b->step_counter++;
     if (ctx_b->step_counter < ctx_b->steps_per_frame) {
-        return; // Skip the lock and keep running instantly!
+        return; // Skip the lock and keep running
     }
     
     ctx_b->step_counter = 0;
@@ -85,7 +85,7 @@ void BFS_Run(AlgoContext* ctx_b){
                     hook_MarkNode(ctx, neighbor, STATE_FRONTIER);
                     neighbor->gcost = current_node->gcost + 1;
                     
-                    // 3. BREADCRUMBS: Record exactly how we got here
+                    
                     neighbor->parent_x = current_node->x;
                     neighbor->parent_y = current_node->y;
                     
@@ -223,13 +223,11 @@ void dijkstra_Run(AlgoContext* ctx_b){
         while (trace_x != -1 && trace_y != -1) {
             if (atomic_load(&ctx_b->kill_signal)) break;
             
-            // Stop right before we overwrite the Green start node
             if (trace_x == ctx->start_x && trace_y == ctx->start_y) break;
             
             GridNode* path_node = &GET_ELEM(ctx, trace_x, trace_y);
             hook_MarkNode(ctx, path_node, STATE_PATH);
             
-            // Move backward to the next parent
             trace_x = path_node->parent_x;
             trace_y = path_node->parent_y;
         }
@@ -266,6 +264,7 @@ const Algorithm DijkstraAlgorithm = {
 
 #pragma endregion
 
+#pragma region Astar
 int astar_ManhattenDist(int x1,int y1,int x2,int y2){
     return abs(x1-x2)+abs(y1-y2);
 }
@@ -286,7 +285,7 @@ void astar_Init(AlgoContext* ctx_b){
     GridNode* start_node = &GET_ELEM(ctx, ctx->start_x, ctx->start_y);
     start_node->gcost = 0;
     
-    // Initialize the starting F-cost
+    // Fcost=Hcost because Gcost is 0
     start_node->fcost = astar_ManhattenDist(start_node->x, start_node->y, ctx->target_x, ctx->target_y);
     
     start_node->state = STATE_FRONTIER;
@@ -345,20 +344,17 @@ void astar_Run(AlgoContext* ctx_b){
         }
     }
     if (target_found) {
-        // Start backtracking from the node just before the target
         int trace_x = current_node->parent_x;
         int trace_y = current_node->parent_y;
         
         while (trace_x != -1 && trace_y != -1) {
             if (atomic_load(&ctx_b->kill_signal)) break;
             
-            // Stop right before we overwrite the Green start node
             if (trace_x == ctx->start_x && trace_y == ctx->start_y) break;
             
             GridNode* path_node = &GET_ELEM(ctx, trace_x, trace_y);
             hook_MarkNode(ctx, path_node, STATE_PATH);
             
-            // Move backward to the next parent
             trace_x = path_node->parent_x;
             trace_y = path_node->parent_y;
         }
@@ -391,3 +387,5 @@ const Algorithm AstarAlgorithm = {
         .space_recur_complexity = "O(1)"
     }
 };
+
+#pragma endregion

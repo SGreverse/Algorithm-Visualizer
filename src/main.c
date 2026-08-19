@@ -3,6 +3,7 @@
 #include "pf_types.h"
 #include "raylib.h"
 #include "sort_algorithms.h"
+#include "data_structures.h"
 #include "sort_types.h"
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -13,7 +14,7 @@
 #include <stdio.h> 
 
 #define MAX_VAL 400
-#define SCREEN_WIDTH 1000  // Widened slightly for better taWb fit
+#define SCREEN_WIDTH 1000 
 #define SCREEN_HEIGHT 700
 #define UI_HEIGHT 170
 
@@ -21,7 +22,7 @@
 #define MIN_ARRAY_SIZE 10
 
 #define MIN_GRID_COLS 10
-#define MAX_GRID_COLS 150
+#define MAX_GRID_COLS MAX_GRID_COLUMNS //this actually feel pretty dumb icl but sure
 
 #define MIN_SPEED 1
 #define MAX_SPEED 1000
@@ -35,7 +36,7 @@ typedef enum {
 const char* APP_MODES[] = { "SORTING", "PATHFINDING" };
 const int NUM_MODES = 2;
 
-// --- ALGORITHM ARRAYS ---
+
 const Algorithm* SORTING_ALGORITHMS[] = {
     &BubbleSortAlgo,
     &InsertionSortAlgo,
@@ -47,7 +48,6 @@ const Algorithm* SORTING_ALGORITHMS[] = {
     &HeapSortAlgo
 };
 
-// Mock Pathfinding algorithms so the code compiles and runs
 
 const Algorithm* PATHFINDING_ALGORITHMS[] = {
     &BFSAlgorithm,
@@ -62,7 +62,7 @@ int workerThread_Run(void* arg) {
     active_algo->init(ctx);
     active_algo->run(ctx);
     
-    // Only flag as finished if not killed mid-run
+    // if not killed mid run, flag finished
     if (!atomic_load(&ctx->kill_signal)) {
         atomic_store(&ctx->is_finished, true);
     }
@@ -76,7 +76,6 @@ void randomizeArray(SortContext* ctx) {
     }
     atomic_store(&BASE(ctx)->is_finished, false);
     
-    // Reset the counters
     ctx->compare_count = 0;
     ctx->swap_count = 0;
     ctx->write_count = 0;
@@ -201,7 +200,7 @@ int main(void) {
     pf_ctx.mark_node = hook_MarkNode;
     randomizeGrid(&pf_ctx,false);
 
-    // --- STATE VARIABLES ---
+    // state variables
     AppMode current_mode = MODE_SORTING;
     AlgoContext* active_context = (AlgoContext*)&sort_ctx;
 
@@ -308,7 +307,7 @@ int main(void) {
         }
 
         // main control buttons
-        Rectangle btn = { 30, 90, 160, 50 }; // Shifted down
+        Rectangle btn = { 30, 90, 160, 50 }; 
         bool btn_hover = CheckCollisionPointRec(mouse, btn);
         
         if (!is_running && !atomic_load(&active_context->is_finished)) {
@@ -348,7 +347,7 @@ int main(void) {
             is_docs_shown = true;
         }
 
-        // --- DYNAMIC CONTROLS (Only show relevant sliders) ---
+        // dynamic controls
         if (current_mode == MODE_SORTING) {
             // Array Size Slider
             Rectangle track = { 420, 100, 260, 6 };
@@ -382,7 +381,7 @@ int main(void) {
                 }
         }
         else if (current_mode == MODE_PATHFINDING) {
-            // --- Pathfinding Grid Size Slider ---
+            //Pathfinding Grid Size Slider
             Rectangle track = { 420, 100, 260, 6 };
             DrawRectangleRec(track, GetColor(0x4B5563FF));
             
@@ -405,7 +404,7 @@ int main(void) {
                     
                     size_t calc_cols = MIN_GRID_COLS + (size_t)(normalized * (MAX_GRID_COLS - MIN_GRID_COLS));
                     
-                    // If the column size actually changed, we must reallocate memory
+                    
                     if (calc_cols != pf_ctx.n_columns) {
                         pf_ctx.n_columns = calc_cols;
                         pf_ctx.n_rows = calc_cols / 2; // Maintain 2:1 visual aspect ratio
@@ -416,7 +415,6 @@ int main(void) {
                         pf_ctx.target_x = pf_ctx.n_columns - 3;
                         pf_ctx.target_y = pf_ctx.n_rows / 2;
 
-                        // memory reallocation
                         free(pf_ctx.grid);
                         pf_ctx.grid = calloc(pf_ctx.n_columns * pf_ctx.n_rows, sizeof(GridNode));
                         
@@ -442,7 +440,7 @@ int main(void) {
             DrawText(TextFormat("Swaps: %zu", sort_ctx.swap_count), stats_x, stats_y + 20, 16, GetColor(0x9CA3AFFF)); 
             DrawText(TextFormat("Writes: %zu", sort_ctx.write_count), stats_x, stats_y + 40, 16, GetColor(0x9CA3AFFF));
         }
-        // Speed slider logic (Applies to ALL algorithms)
+        // Speed slider logic
         Rectangle speed_track = { 420, 145, 260, 6 };
         DrawRectangleRec(speed_track, GetColor(0x4B5563FF));
         float speed_percent = (float)(target_speed - MIN_SPEED) / (MAX_SPEED - MIN_SPEED);
@@ -571,7 +569,7 @@ int main(void) {
         if (is_docs_shown) {
              DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.7f));
             
-            // 2. The Modal Panel
+            // Modal Panel
             int modalWidth = 800;
             int modalHeight = 600;
             Rectangle modal = { 
@@ -584,7 +582,7 @@ int main(void) {
             DrawRectangleRec(modal, GetColor(0x1F2937FF)); // Dark Gray Base
             DrawRectangleLinesEx(modal, 2, GetColor(0x3B82F6FF)); // Blue border
             
-            // Close Button ('X')
+            // Close Button 
             Rectangle closeBtn = { modal.x + modal.width - 40, modal.y + 10, 30, 30 };
             bool closeHover = CheckCollisionPointRec(mouse, closeBtn);
             DrawText("X", closeBtn.x + 8, closeBtn.y + 5, 20, closeHover ? RED : LIGHTGRAY);
@@ -593,7 +591,7 @@ int main(void) {
                 is_docs_shown = false;
             }
 
-            // --- RENDER CONTENT ---
+            // docs content render
             float padding = 30.0f;
             float startY = modal.y + padding;
             Font defaultFont = GetFontDefault();
@@ -607,7 +605,7 @@ int main(void) {
             startY += 25;
             drawTextWrapped(defaultFont, active_algo->docs.overview, (Vector2){modal.x + padding, startY}, 18, 1.0f, modalWidth - (padding*2), LIGHTGRAY);
             
-            // Process (Skip down to allow space for overview)
+            // algorithm process
             startY += 100; 
             DrawText("How it Works", modal.x + padding, startY, 20, GetColor(0x60A5FAFF));
             startY += 25;
