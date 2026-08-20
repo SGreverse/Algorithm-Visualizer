@@ -373,13 +373,13 @@ const Algorithm AstarAlgorithm = {
     .run = astar_Run,
     .cleanup = astar_Cleanup, 
     .docs = {
-        .overview = "A highly efficient, heuristic-based pathfinding algorithm widely used in game development and AI navigation. It combines the absolute shortest-path guarantee of Dijkstra's Algorithm with the directional focus of a Greedy Best-First Search.",
+        .overview = "A highly efficient, heuristic-based pathfinding algorithm widely used in game development and AI navigation. It combines the absolute shortest-path guarantee of Dijkstra's Algorithm with the addition of the knowledge of where the goal is to estimate how a specific node is to it.",
         .process = "1. Initialize the start node's G-Cost (distance from start) to 0.\n"
                    "2. Calculate its H-Cost (estimated distance to target using Manhattan distance) and set its F-Cost (G + H).\n"
                    "3. Insert the start node into a Min-Heap sorted by F-Cost.\n"
                    "4. Extract the node with the lowest F-Cost.\n"
                    "5. Check all valid neighbors. If a neighbor offers a shorter G-Cost path, update its G-Cost, recalculate its F-Cost, record the parent, and update the Min-Heap.\n"
-                   "6. Repeat until the target node is extracted.",
+                   "6. Repeat until the target node is extracted aaaaaa.",
         .time_best = "O(E)",
         .time_avg = "O(E)", 
         .time_worst = "O(E log V)",

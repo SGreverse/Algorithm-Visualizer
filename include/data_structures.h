@@ -1,3 +1,5 @@
+
+
 #ifndef DATASTRUCTURES_H
 #define DATASTRUCTURES_H
 
@@ -7,9 +9,9 @@
 
 //need to make it work with the define in main
 #define MAX_GRID_COLUMNS 150
-
+#define GRID_SIZE MAX_GRID_COLUMNS*MAX_GRID_COLUMNS/2
 typedef struct{
-    GridNode* items[MAX_GRID_COLUMNS*MAX_GRID_COLUMNS/2];
+    GridNode* items[GRID_SIZE];
     int front;
     int rear;
 } Queue;
@@ -24,7 +26,7 @@ GridNode* dequeue(Queue* q);
 typedef struct
 {
     //init with set max size
-    GridNode* data[MAX_GRID_COLUMNS*MAX_GRID_COLUMNS/2];
+    GridNode* data[GRID_SIZE];
     size_t size;
 } Heap;
 

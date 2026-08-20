@@ -68,6 +68,7 @@ typedef struct {
     bool is_running;
     bool is_dragging_size_slider;
     bool is_docs_shown;
+    //when array turns green
     bool is_sweeping;
     float sweep_timer;
     int sweep_index;
@@ -412,10 +413,11 @@ void renderUI(AppState* state, SortContext* sort_ctx, PFContext* pf_ctx, Vector2
 }
 
 //function for rendering the context of the algorithm
-void renderVisualizer(AppState* state, SortContext* sort_ctx, PFContext* pf_ctx) {
+void renderVisualizer(AppState* state) {
     mtx_lock(&state->active_context->mutex);
 
     if (state->current_mode == MODE_SORTING) {
+        SortContext* sort_ctx=CAST_SORT(state->active_context);
         float bar_width = (float)SCREEN_WIDTH / sort_ctx->size;
         float max_bar_height = SCREEN_HEIGHT - UI_HEIGHT - 20; 
         float height_multiplier = max_bar_height / MAX_VAL;
@@ -437,6 +439,7 @@ void renderVisualizer(AppState* state, SortContext* sort_ctx, PFContext* pf_ctx)
         }
     } 
     else if (state->current_mode == MODE_PATHFINDING) {
+        PFContext* pf_ctx=CAST_PF(state->active_context);
         float cell_w = (float)SCREEN_WIDTH / pf_ctx->n_columns;
         float cell_h = (float)(SCREEN_HEIGHT - UI_HEIGHT) / pf_ctx->n_rows;
 
@@ -530,10 +533,12 @@ void renderDocsModal(AppState* state, Vector2 mouse) {
     startY += 25;
     drawTextWrapped(defaultFont, active_algo->docs.process, (Vector2){modal.x + padding, startY}, 18, 1.0f, modalWidth - (padding*2), LIGHTGRAY);
     
-    startY += 170;
+    
+    startY += 200;
+    if(state->current_mode==MODE_PATHFINDING && active_algo!=&BFSAlgorithm){
     DrawText("*Note: Red cells mean that the weight of them is 5 times heavier", modal.x + padding, startY, 20, GetColor(0x60A5FAFF));
-
-    startY += 30;
+    }
+    startY += 50;
     Rectangle compBox = { modal.x + padding, startY, modalWidth - (padding*2), 90 };
     DrawRectangleRec(compBox, GetColor(0x111827FF)); 
     
@@ -541,7 +546,7 @@ void renderDocsModal(AppState* state, Vector2 mouse) {
     
     DrawText(TextFormat("Best: %s", active_algo->docs.time_best), compBox.x + 10, compBox.y + 40, 16, GetColor(0x10B981FF)); 
     DrawText(TextFormat("Avg: %s", active_algo->docs.time_avg), compBox.x + 150, compBox.y + 40, 16, GetColor(0xFBBF24FF)); 
-    DrawText(TextFormat("Worst: %s", active_algo->docs.time_worst), compBox.x + 290, compBox.y + 40, 16, GetColor(0xEF4444FF)); 
+    DrawText(TextFormat("Worst: %s", active_algo->docs.time_worst), compBox.x + 330, compBox.y + 40, 16, GetColor(0xEF4444FF)); 
     
     DrawText(TextFormat("Space (Auxiliary): %s   Space(Stack): %s", active_algo->docs.space_aux_complexity,active_algo->docs.space_recur_complexity), 
                             compBox.x + 10, compBox.y + 65, 16, GetColor(0xA78BFAFF)); 
@@ -600,7 +605,7 @@ int main(void) {
         ClearBackground(GetColor(0x121212FF)); 
 
         renderUI(&state, &sort_ctx, &pf_ctx, mouse);
-        renderVisualizer(&state, &sort_ctx, &pf_ctx);
+        renderVisualizer(&state);
 
         if (state.is_docs_shown) {
             renderDocsModal(&state, mouse);
