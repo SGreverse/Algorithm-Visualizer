@@ -19,6 +19,15 @@ int hook_Compare(SortContext* ctx, int idx_a, int idx_b){
     int result = ctx->array[idx_a] - ctx->array[idx_b];
     ctx->active_index_a = idx_a; 
     ctx->active_index_b = idx_b; 
+
+    ctx_b->step_counter++;
+    if (ctx_b->step_counter < ctx_b->steps_per_frame) {
+        mtx_unlock(&ctx_b->mutex);
+        return result; // Skip the lock and keep running
+    }
+    
+    ctx_b->step_counter = 0;
+
     ctx_b->frame_consumed = false; 
     while(!ctx_b->frame_consumed && !atomic_load(&ctx_b->kill_signal)){
         cnd_wait(&ctx_b->condition_var, &ctx_b->mutex);
@@ -41,6 +50,16 @@ void hook_Swap(SortContext* ctx, int idx_a, int idx_b) {
     ctx->array[idx_b] = temp; 
     ctx->active_index_a = idx_a; 
     ctx->active_index_b = idx_b; 
+
+    ctx_b->step_counter++;
+    if (ctx_b->step_counter < ctx_b->steps_per_frame) {
+        mtx_unlock(&ctx_b->mutex);
+        return; // Skip the lock and keep running
+    }
+
+    ctx_b->step_counter = 0;
+
+
     ctx_b->frame_consumed = false; 
     while (!ctx_b->frame_consumed && !atomic_load(&ctx_b->kill_signal)) {
         cnd_wait(&ctx_b->condition_var, &ctx_b->mutex);
@@ -60,6 +79,15 @@ void hook_Write(SortContext* ctx, int idx,int val){
     ctx->array[idx]=val;
     ctx->active_index_a = idx;
     ctx->active_index_b=-1;
+
+    ctx_b->step_counter++;
+    if (ctx_b->step_counter < ctx_b->steps_per_frame) {
+        mtx_unlock(&ctx_b->mutex);
+        return; // Skip the lock and keep running
+    }
+
+    ctx_b->step_counter = 0;
+
     ctx_b->frame_consumed = false;
     while (!ctx_b->frame_consumed && !atomic_load(&ctx_b->kill_signal)) {
         cnd_wait(&ctx_b->condition_var, &ctx_b->mutex);

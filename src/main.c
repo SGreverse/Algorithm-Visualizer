@@ -479,10 +479,9 @@ void renderVisualizer(AppState* state) {
     bool should_step = false;
     if (state->target_speed >= 60) {
         should_step = true;
-        if(state->current_mode == MODE_PATHFINDING) {
-           state->active_context->steps_per_frame = state->target_speed / 60;
-        }
-    } else {//if less than 60 fps, simulate a slower fps so UI wont be stuck
+        state->active_context->steps_per_frame = state->target_speed / 60;
+    }
+    else {//if less than 60 fps, simulate a slower fps so UI wont be stuck
         state->step_timer += GetFrameTime();
         float time_per_step = 1.0f / state->target_speed;
         if (state->step_timer >= time_per_step) {
